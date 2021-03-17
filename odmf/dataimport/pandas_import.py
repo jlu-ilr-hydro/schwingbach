@@ -276,6 +276,8 @@ def load_dataframe(
             df[col.name] *= col.factor
         except TypeError:
             ...
+        if col.factor_column:
+            df[col.name] *= df['factor for ' + col.name]
 
     return df
 

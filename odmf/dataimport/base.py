@@ -131,7 +131,7 @@ class ImportColumn:
 
     def __init__(self, column, name, valuetype, factor=1.0, comment=None,
                  difference=None, minvalue=-1e308, maxvalue=+1e308, append=None,
-                 level=None, access=None, ds_column=None):
+                 level=None, access=None, ds_column=None, factor_column=None):
         """
         Creates a column description in a delimited text file.
         upon import, the column will be saved as a dataset in the database
@@ -148,6 +148,8 @@ class ImportColumn:
         level: Level property of the dataset. Use this for Instruments measuring at one site in different depth
         access: Access property of the dataset
         ds_column: explicit dataset for uploading column @see: mm.py
+        factor_column: a column indicator storing individual factors for the data column. Useful eg. for measurements of
+                        diluted samples
 
         """
         self.column = int(column)
@@ -162,6 +164,7 @@ class ImportColumn:
         self.level = level
         self.access = access
         self.ds_column = ds_column
+        self.factor_column = factor_column
 
     def __str__(self):
         return "%s[%s]:column=%i" % ('d' if self.difference else '', self.name,
@@ -202,6 +205,10 @@ class ImportColumn:
         if self.ds_column is not None:
             config.set(section, '; Explicit dataset id for column to upload to')
             config.set(section, 'ds_column', self.ds_column)
+        if self.factor_column is not None:
+            config.set(section, '; a column indicator storing individual factors for the data column. '
+                                'Useful eg. for measurements of diluted samples')
+            config.set(section, 'factor_column', self.factor_column)
 
     @classmethod
     def from_config(cls, config, section):
@@ -223,8 +230,9 @@ class ImportColumn:
                    level=getvalue('level', float),
                    access=getvalue('access', int),
 
-                   # Added as lab import (mm.py) feature
-                   ds_column=getvalue('ds_column', int)
+                   ds_column=getvalue('ds_column', int),
+                   factor_column=getvalue('factor_column', int)
+
                    )
 
 
@@ -341,9 +349,14 @@ class ImportDescription(object):
                 list(self.datecolumns)
                 + [col.column for col in self.columns]
                 + [col.ds_column for col in self.columns if col.ds_column]
+                + [col.factor_column for col in self.columns if col.factor_column]
         )
-        names = ['date', 'time'][:len(self.datecolumns)] + [col.name for col in self.columns] + \
-                ['dataset for ' + col.name for col in self.columns if col.ds_column]
+        names = (
+            ['date', 'time'][:len(self.datecolumns)]
+            + [col.name for col in self.columns]
+            + ['dataset for ' + col.name for col in self.columns if col.ds_column]
+            + ['factor for ' + col.name for col in self.columns if col.factor_column]
+        )
 
         if self.samplecolumn:
             columns += [self.samplecolumn]
