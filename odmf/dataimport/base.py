@@ -147,7 +147,7 @@ class ImportColumn:
         append: For automatic import, append to this datasetid
         level: Level property of the dataset. Use this for Instruments measuring at one site in different depth
         access: Access property of the dataset
-        ds_column: explicit dataset for uploading column @see: mm.py
+        ds_column: explicit dataset for uploading column
         factor_column: a column indicator storing individual factors for the data column. Useful eg. for measurements of
                         diluted samples
 
@@ -176,9 +176,6 @@ class ImportColumn:
         """
         config.set(section, '; 0 based column number')
         config.set(section, 'column', self.column)
-        config.set(
-            section, '; name of the field, will become name of the dataset')
-        config.set(section, 'name', self.name)
         config.set(section, '; id of the valuetype in this field')
         config.set(section, 'valuetype', self.valuetype)
         config.set(section, '; factor for unit conversion')
@@ -210,6 +207,12 @@ class ImportColumn:
                                 'Useful eg. for measurements of diluted samples')
             config.set(section, 'factor_column', self.factor_column)
 
+    def to_string(self):
+        """
+        Creates a string representation of the import column in cinfig format
+        """
+        return f'[{self.name}]\n' + '\n'.join(f'{k} = {v}' for k, v in vars(self).items())
+
     @classmethod
     def from_config(cls, config, section):
         "Get the column description from a config-file"
@@ -219,7 +222,7 @@ class ImportColumn:
             else:
                 return None
         return cls(column=config.getint(section, 'column'),
-                   name=config.get(section, 'name'),
+                   name=section,
                    valuetype=config.getint(section, 'valuetype'),
                    factor=config.getfloat(section, 'factor'),
                    comment=getvalue('comment'),
@@ -234,6 +237,22 @@ class ImportColumn:
                    factor_column=getvalue('factor_column', int)
 
                    )
+
+    @classmethod
+    def from_dataset(cls, dataset, column):
+        return cls(
+            column,
+            name=dataset.name,
+            valuetype=dataset.valuetype.id,
+            comment=dataset.comment,
+            minvalue=dataset.valuetype.minvalue,
+            maxvalue=dataset.valuetype.maxvalue,
+            append=dataset.id,
+            level=dataset.level,
+            access=dataset.access
+        )
+
+
 
 
 def config_getdict(config, section, option):
@@ -256,8 +275,7 @@ def config_getdict(config, section, option):
 
 class ImportDescription(object):
     """
-    Describes the file format and content of a delimited text file for
-    import to the database.
+    Describes how tabular data files should be imported into the database
     """
     columns: typing.List[ImportColumn]
     name: str
@@ -273,15 +291,14 @@ class ImportDescription(object):
         skiplines: The number of lines prepending the actual data
         delimiter: The delimiter sign of the columns. Use TAB for tab-delimited columns, otherwise ',' or ';'
         decimalpoint: Symbol used to separate decimal place
-        dateformat: ...
-        datecolumns: ...
+        dateformat: Format of date and time values, eg. %Y-%m-%d
+        datecolumns: Column numbers containing measurement time
         timezone: str in pytz format
         project: str project for the dataset to link to. Optional.
         nodata: list of values that don't represent valid data. E.g. ['NaN']. Is optional and default is empty list.
         worksheet: The position of the worksheet of an excel file. Optional and default is the first (1)
         sample_column: Column number containing the name of a sample
         sample_mapping: Mapping of labcodes to site ids. Is Optional and default is None
-        sitecolumn:
 
         """
         self.name = ''
@@ -600,4 +617,20 @@ def get_last_ds_for_site(session, idescr: ImportDescription, col: ImportColumn, 
         q = q.filter(db.Dataset.level == col.level)
 
     return q.order_by(db.Dataset.end.desc()).limit(1).scalar()
+
+def compare_section_and_name(fn):
+    """
+    Helper function to test if section captions for conf files ever differ from the name option
+    Parameters
+    ----------
+    fn: Filename
+    """
+    from configparser import RawConfigParser
+    config = RawConfigParser()
+    config.read_file(open(fn))
+    return [
+        (fn, sect, config.get(sect, 'name'))
+        for sect in config.sections()
+        if config.has_option(sect, 'name')
+    ]
 

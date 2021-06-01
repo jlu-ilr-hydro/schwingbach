@@ -307,13 +307,32 @@
                     </ul>
                 </div>
                 <div class="tab-pane" id="export" role="tabpanel">
-                    <a href="sites.csv" style="float:left;">
-                        <img src="${conf.root_url}/media/ui-icons/excel-icon.gif" />
-                    </a>
-                    <div class="box">
-                        You can <a href="${conf.root_url}/site/sites.csv">download</a> all sites as a csv-file for import to Excel <a href="${conf.root_url}/site/sites.csv">here</a>.<br/>
-                        Note: This works only if you are using English language settings in Windows.
-                    </div>
+                    <h1 class="display-4">
+                        Download site coordinates
+                    </h1>
+                    <ul class="list-group">
+                        <li class="list-group-item">
+                            <a href="export?format=xlsx">
+                                <i class="fas fa-file-excel mr-4"/> Excel
+                            </a>
+                        </li>
+                        <li class="list-group-item">
+                            <a href="export?format=csv">
+                                <i class="fas fa-file-csv mr-4" /> CSV
+                            </a>
+                        </li>
+                        <li class="list-group-item">
+                            <a href="export?format=tsv">
+                                <i class="fas fa-file mr-4" /> TSV
+                            </a>
+                        </li>
+                        <li class="list-group-item">
+                            <a href="export?format=json">
+                                <i class="fas fa-file-code mr-4"/> JSON
+                            </a>
+                        </li>
+
+                    </ul>
                 </div>
             </div>
         </div>

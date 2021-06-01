@@ -10,7 +10,7 @@ import sys
 import os
 
 from logging import getLogger
-from . import prefix
+from . import prefix, __version__
 
 logger = getLogger(__name__)
 
@@ -76,6 +76,7 @@ class Configuration:
     nav_left_logo = '/media/lfe-logo.png'
     manual_measurements_pattern = '(.+\\/)*datafiles\\/lab\\/([a-zA-Z0-9]+\\/)*.*\\.(xls|xlsx)$'
     map_default = {'lat': 50.5, 'lng': 8.55, 'type': 'hybrid', 'zoom': 15}
+    utm_zone = '32N'
     upload_max_size = 25000000
     server_port = 8080
     google_maps_api_key = ''
@@ -87,7 +88,7 @@ class Configuration:
     datafiles = './datafiles'
     preferences = './preferences'
     description = 'A server for data-management for quantitative field research'
-    user = os.environ.get('USER')
+    user = os.environ.get('USER') or os.environ.get('USERNAME')
 
     def __bool__(self):
         return ... not in vars(self).values()
@@ -144,6 +145,10 @@ class Configuration:
 
     def google_maps_api(self, callback: str):
         return f'https://maps.googleapis.com/maps/api/js?key={self.google_maps_api_key}&callback={callback}'
+
+    @property
+    def version(self):
+        return __version__
 
 
 def load_config():

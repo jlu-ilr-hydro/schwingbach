@@ -5,11 +5,16 @@ Created on 13.07.2012
 
 @author: philkraf
 '''
-from .. import lib as web
-from ... import db
+import datetime
+import pandas as pd
+import io
+from cherrypy.lib.static import serve_fileobj
 from traceback import format_exc as traceback
 from glob import glob
 import os.path as op
+
+from .. import lib as web
+from ... import db
 from ..auth import expose_for, group
 from io import BytesIO
 from ...db import projection as proj
@@ -80,24 +85,25 @@ class SitePage:
         if 'save' in kwargs:
             with db.session_scope() as session:
                 try:
-                    site = session.query(db.Site).get(int(siteid))
-                    if not site:
-                        site = db.Site(id=int(siteid))
-                        session.add(site)
-                    site.lon = web.conv(float, kwargs.get('lon'))
-                    site.lat = web.conv(float, kwargs.get('lat'))
-                    if None in (site.lon, site.lat):
+                    lon = web.conv(float, kwargs.get('lon'))
+                    lat = web.conv(float, kwargs.get('lat'))
+                    if lon > 180 or lat > 180:
+                        lat, lon = proj.UTMtoLL(23, lat, lon, conf.utm_zone)
+                    if None in (lon, lat):
                         raise web.redirect(f'../{siteid}', error='The site has no coordinates')
-                    if site.lon > 180 or site.lat > 180:
-                        site.lat, site.lon = proj.UTMtoLL(
-                            23, site.lat, site.lon, '32N')
 
+                    site = session.query(db.Site).get(siteid)
+                    if not site:
+                        site = db.Site(id=siteid, lat=lat, lon=lon)
+                        session.add(site)
+                    site.lat, site.lon = lat, lon
                     site.name = kwargs.get('name')
                     site.height = web.conv(float, kwargs.get('height'))
                     site.icon = kwargs.get('icon')
                     site.comment = kwargs.get('comment')
-                except:
-                    raise web.redirect(f'{self.url}/{siteid}', error=traceback())
+                except Exception as e:
+                    tb = traceback()
+                    raise web.redirect(f'{self.url}/{siteid}', error=f'## {e}\n\n```{tb}```')
         raise web.redirect(f'{self.url}/{siteid}')
 
     @expose_for()
@@ -166,9 +172,75 @@ class SitePage:
     @expose_for()
     @web.mime.json
     @web.method.get
-    def json(self):
-        with db.session_scope() as session:
-            return web.json_out(session.query(db.Site).order_by(db.Site.id).all())
+    def json(self, valuetype=None, instrument=None, user=None, date=None, max_data_age=None, fulltext=None):
+        """
+        Returns the sites matching the filter variables as json representation
+
+        Parameters
+        ----------
+        valuetype: id
+            Return only sites with datasets containing this valuetype
+
+        user:
+            user name of user doing measurements at this site
+        date:
+
+        max_data_age
+        instrument: id
+            Return only sites with an active installation of the given instrument_id,
+            use '*' to match any active installation, negative number to include removed installations
+
+        """
+        try:
+            valuetype = web.conv(int, valuetype)
+            date = web.parsedate(date, False)
+            max_data_age = web.conv(int, max_data_age)
+            with db.session_scope() as session:
+                Q = session.query
+                if any([valuetype, user, date, max_data_age]):
+                    datasets = Q(db.Dataset)
+                    if valuetype:
+                        datasets = datasets.filter_by(_valuetype=valuetype)
+                    if user:
+                        datasets = datasets.filter_by(_measured_by=user)
+                    if date:
+                        datasets = datasets.filter(
+                            db.Dataset.start <= date, db.Dataset.end >= date)
+                    if max_data_age:
+                        age = datetime.timedelta(days=max_data_age * 365.25)
+                        oldest = datetime.datetime.today() - age
+                        datasets = datasets.filter(db.Dataset.end >= oldest)
+                    sites = {ds.site for ds in datasets}
+                else:
+                    sites = set(session.query(db.Site))
+
+                if instrument:
+                    if instrument == 'any':
+                        installations = Q(db.Installation).filter(db.Installation.removedate == None)
+                    elif instrument == 'installed':
+                        installations = Q(db.Installation).join(db.Datasource).filter(
+                            db.Installation.removedate == None,
+                            db.Datasource.sourcetype != 'manual'
+                        )
+                    else:
+                        instrument = web.conv(int, instrument)
+                        installations = Q(db.Installation).filter_by(_instrument=abs(instrument))
+                        if instrument > 0 :
+                            installations = installations.filter(db.Installation.removedate == None)
+                    sites &= {inst.site for inst in installations}
+                if fulltext:
+                    from sqlalchemy import or_
+                    filter = Q(db.Site).filter(
+                        or_(
+                            db.Site.name.ilike('%' + fulltext + '%'),
+                            db.Site.comment.ilike('%' + fulltext + '%')
+                        )
+                    )
+                    sites &= set(filter)
+
+                return web.json_out(sorted(sites, key=lambda s: s.id))
+        except Exception as e:
+            raise web.AJAXError(500, str(e))
 
     @expose_for()
     @web.mime.kml
@@ -232,3 +304,22 @@ class SitePage:
                 st.write(('%s,%f,%f,%0.1f,%0.1f,%s,"%s","%s"\n' %
                           (s.id, s.lon, s.lat, x, y, h, s.name, c)).encode('utf-8'))
             return st.getvalue()
+
+    @expose_for(group.logger)
+    @web.method.get
+    def export(self, format='xlsx'):
+        from ...tools.exportdatasets import export_dataframe
+        with db.session_scope() as session:
+            q = session.query(db.Site)
+            dataframe = pd.read_sql(q.statement, session.bind)
+            buffer = io.BytesIO()
+            mime = web.mime.get(format, web.mime.binary)
+            buffer = export_dataframe(buffer, dataframe, format, index_label=None)
+            name = f'sites-{datetime.datetime.now():%Y-%m-%d}'
+            buffer.seek(0)
+            return serve_fileobj(
+                buffer,
+                str(mime),
+                'attachment',
+                name + '.' + format
+            )
