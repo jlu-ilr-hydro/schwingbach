@@ -330,14 +330,15 @@ def get_dataframe_for_ds_column(session, column: ImportColumn, data: pd.DataFram
         return range(start, end)
 
     for dsid in ds_ids.unique():
+        dsid = int(dsid)
         ds = session.query(db.Dataset).get(dsid)
         if ds:
             # Filter data for the current ds
             ds_data = data[ds_ids == dsid]
             newids[dsid] = get_newid_range(ds)
 
-            ds.start = min(ds.start, ds_data.date.min().to_pydatetime())
-            ds.end = max(ds.end, ds_data.date.max().to_pydatetime())
+            ds.start = min(ds.start, ds_data.time.min().to_pydatetime())
+            ds.end = max(ds.end, ds_data.time.max().to_pydatetime())
         else:
             missing_ds.append(dsid)
 
