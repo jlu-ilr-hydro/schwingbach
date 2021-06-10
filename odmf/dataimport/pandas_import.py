@@ -356,6 +356,11 @@ def get_dataframe_for_ds_column(session, column: ImportColumn, data: pd.DataFram
 
     if 'sample' in data.columns:
         col_df['sample'] = data['sample']
+        
+    
+    #checks if all not na values are in-between the defined min and max value of the conf file
+    if col_df.value.dropna().between(icol.minvalue,icol.maxvalue).all() == False:
+        raise DataImportError("At least one value of column %s is out of range!" % column.name)
 
     return col_df[~pd.isna(col_df['value'])]
 
