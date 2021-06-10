@@ -579,8 +579,11 @@ def savetoimports(filename, user, datasets=None):
     d = os.path.dirname(filename)
     f = open(os.path.join(d, '.import.hist'), 'a')
     f.write('%s,%s,%s' % (os.path.basename(filename), user, datetime.now()))
-    for ds in datasets:
-        f.write(',%s' % ds)
+    if datasets:
+        for ds in datasets:
+            f.write(',%s' % ds)
+    else:
+        f.write(',various datasets')
     f.write('\n')
     f.close()
 
