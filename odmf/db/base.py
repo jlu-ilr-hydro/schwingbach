@@ -144,6 +144,9 @@ class ObjectGetter:
         self.cls = cls
         self.session = session
 
+    def __repr__(self):
+        return f'db.{self.cls.__name__}[...]'
+
     @property
     def q(self) -> orm.Query:
         return self.session.query(self.cls)
